@@ -284,17 +284,17 @@ def handle_callback_query(call):
                 text="Возвращаюсь в главное меню. Выберите категорию:",
                 reply_markup=markup
             )
-    elif prefix == PREFIX_PRODUCT:
-        product_code = value
-        send_product_info(chat_id, product_code, reply_to_thread_id)
-    else:
-        markup = get_main_inline_markup(reply_to_thread_id)
-        edit_message_text_unified(
-            chat_id=chat_id,
-            message_id=message_id_to_edit,
-            text="Неизвестная команда. Пожалуйста, используйте кнопки меню.",
-            reply_markup=markup
-        )
+#    elif prefix == PREFIX_PRODUCT:
+#       product_code = value
+#        send_product_info(chat_id, product_code, reply_to_thread_id)
+#    else:
+#        markup = get_main_inline_markup(reply_to_thread_id)
+#        edit_message_text_unified(
+#            chat_id=chat_id,
+#            message_id=message_id_to_edit,
+#            text="Неизвестная команда. Пожалуйста, используйте кнопки меню.",
+#            reply_markup=markup
+#        )
 
 # --- Функция для отправки информации о товаре ---
 def send_product_info(chat_id, product_code, reply_to_message_id):
