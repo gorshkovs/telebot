@@ -1,466 +1,435 @@
 import telebot
-
 from telebot import types
-import time
+import json # Для кодирования/декодирования сложных callback_data
 
-bot = telebot.TeleBot('8019074887:AAGZgIX9_60PnQtrhdjB_5hqncaMS9KmpHo')
+bot = telebot.TeleBot('8019074887:AAGZgIX9_60PnQtrhdjB_5hqncaMS9KmpHo') # Вставьте ваш токен
 
-# Первый уровень меню. пользователь начал диалог с ботом
+# --- Константы для CallbackData ---
+# Используем префиксы для определения типа коллбэка
+PREFIX_CATEGORY = "cat_"
+PREFIX_SUBCATEGORY = "subcat_" # Новый префикс для подкатегорий
+PREFIX_PRODUCT = "prod_"
+PREFIX_ACTION = "act_" # Для действий типа "назад", "контакты"
+
+ACTION_BACK_MAIN_MENU = "back_main"
+ACTION_PRODUCT_SOON = "prod_soon"
+ACTION_CONTACTS = "contacts"
+ACTION_BACK_SHOES_MENU = "back_shoes" # Новое действие: назад в меню обуви
+
+# Товары для Футзалок JOMA DRIBLING
+DRIBLING_PRODUCTS = {
+    'DRIS2301IN': "DRIS2301IN",
+    'DRIS2303IN': "DRIS2303IN",
+    'DRIS2309IN': "DRIS2309IN",
+}
+
+# Товары для Футзалок JOMA MUNDIAL
+MUNDIAL_PRODUCTS = {
+    'MUNS2302IN': "MUNS2302IN",
+    'MUNS2328IN': "MUNS2328IN",
+    'MUNS2304IN': "MUNS2304IN",
+}
+
+# --- Вспомогательные функции для создания Inline-клавиатур ---
+def create_callback_data(prefix, value, reply_thread_id=None):
+    """Создает JSON-строку для callback_data с учетом reply_thread_id."""
+    data = {"p": prefix, "v": value}
+    if reply_thread_id:
+        data["t"] = reply_thread_id
+    return json.dumps(data)
+
+def parse_callback_data(json_data):
+    """Парсит JSON-строку callback_data."""
+    return json.loads(json_data)
+
+def get_main_inline_markup(reply_thread_id=None):
+    """Возвращает InlineKeyboardMarkup для основного меню."""
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton('Одежда', callback_data=create_callback_data(PREFIX_CATEGORY, "clothes", reply_thread_id)),
+        types.InlineKeyboardButton('Обувь', callback_data=create_callback_data(PREFIX_CATEGORY, "shoes", reply_thread_id)),
+        types.InlineKeyboardButton('Аксессуары', callback_data=create_callback_data(PREFIX_CATEGORY, "accessories", reply_thread_id)),
+        types.InlineKeyboardButton('Контакты', callback_data=create_callback_data(PREFIX_ACTION, ACTION_CONTACTS, reply_thread_id))
+    )
+    return markup
+
+def get_shoes_inline_markup(reply_thread_id=None):
+    """
+    Возвращает InlineKeyboardMarkup для подменю обуви.
+    Теперь ведет к DRIBLING и MUNDIAL.
+    """
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton('Футзалки JOMA DRIBLING', callback_data=create_callback_data(PREFIX_SUBCATEGORY, "dribling", reply_thread_id)),
+        types.InlineKeyboardButton('Футзалки JOMA MUNDIAL', callback_data=create_callback_data(PREFIX_SUBCATEGORY, "mundial", reply_thread_id)),
+        types.InlineKeyboardButton('\U0001F519 Назад', callback_data=create_callback_data(PREFIX_ACTION, ACTION_BACK_MAIN_MENU, reply_thread_id))
+    )
+    return markup
+
+def get_dribling_shoes_inline_markup(reply_thread_id=None):
+    """Возвращает InlineKeyboardMarkup для подменю Футзалки JOMA DRIBLING."""
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    for code_key, code_value in DRIBLING_PRODUCTS.items():
+        markup.add(types.InlineKeyboardButton(code_value, callback_data=create_callback_data(PREFIX_PRODUCT, code_key, reply_thread_id)))
+    markup.add(types.InlineKeyboardButton('\U0001F519 Назад', callback_data=create_callback_data(PREFIX_ACTION, ACTION_BACK_SHOES_MENU, reply_thread_id)))
+    return markup
+
+def get_mundial_shoes_inline_markup(reply_thread_id=None):
+    """Возвращает InlineKeyboardMarkup для подменю Футзалки JOMA MUNDIAL."""
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    for code_key, code_value in MUNDIAL_PRODUCTS.items():
+        markup.add(types.InlineKeyboardButton(code_value, callback_data=create_callback_data(PREFIX_PRODUCT, code_key, reply_thread_id)))
+    markup.add(types.InlineKeyboardButton('\U0001F519 Назад', callback_data=create_callback_data(PREFIX_ACTION, ACTION_BACK_SHOES_MENU, reply_thread_id)))
+    return markup
+
+def get_product_soon_inline_markup(reply_thread_id=None):
+    """Возвращает InlineKeyboardMarkup для случая 'Товар скоро появится'."""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(types.InlineKeyboardButton('⬅️ Назад в меню', callback_data=create_callback_data(PREFIX_ACTION, ACTION_BACK_MAIN_MENU, reply_thread_id)))
+    return markup
+
+# --- Унифицированные функции для отправки/редактирования сообщений и медиа ---
+def send_message_unified(chat_id, text, reply_markup=None, parse_mode=None, reply_to_message_id=None):
+    """Унифицированная функция для отправки текстовых сообщений."""
+    try:
+        bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+            reply_to_message_id=reply_to_message_id
+        )
+    except telebot.apihelper.ApiTelegramException as e:
+        print(f"Ошибка при отправке сообщения: {e} в чат {chat_id}, reply_to_message_id: {reply_to_message_id}")
+
+def edit_message_text_unified(chat_id, message_id, text, reply_markup=None, parse_mode=None):
+    """Редактирует текст и клавиатуру существующего сообщения."""
+    try:
+        bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode
+        )
+    except telebot.apihelper.ApiTelegramException as e:
+        print(f"Ошибка при редактировании текста сообщения {message_id} в чате {chat_id}: {e}")
+
+def send_media_group_unified(chat_id, media, reply_to_message_id=None):
+    """Унифицированная функция для отправки групп медиафайлов."""
+    try:
+        bot.send_media_group(
+            chat_id=chat_id,
+            media=media,
+            reply_to_message_id=reply_to_message_id
+        )
+    except telebot.apihelper.ApiTelegramException as e:
+        print(f"Ошибка при отправке медиа группы: {e} в чат {chat_id}, reply_to_message_id: {reply_to_message_id}")
+
+# --- ОБРАБОТЧИК ДЛЯ КОМАНДЫ /start ---
 @bot.message_handler(commands=['start'])
-def main(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn1 = types.KeyboardButton('Одежда')
-    btn2 = types.KeyboardButton('Обувь')
-    btn3 = types.KeyboardButton('Аксессуары')
-    btn4 = types.KeyboardButton('Контакты')
-    markup.add(btn1,btn2,btn3, btn4)
-    bot.send_message(message.chat.id, "Привет, выберите категорию.", reply_markup=markup)
+def handle_start(message):
+    """Обрабатывает команду /start."""
+    # Определяем ID исходного комментария, если это комментарий канала
+    initial_reply_thread_id = None
+    if message.reply_to_message and \
+       message.reply_to_message.forward_from_chat and \
+       message.reply_to_message.forward_from_chat.type == 'channel':
+        initial_reply_thread_id = message.message_id # ID самого сообщения /start
 
+    markup = get_main_inline_markup(initial_reply_thread_id) # Передаем thread_id в кнопки
+    
+    send_message_unified(
+        chat_id=message.chat.id,
+        text="Привет! Выберите категорию, используя кнопки:",
+        reply_markup=markup,
+        reply_to_message_id=initial_reply_thread_id # Отвечаем на исходный комментарий
+    )
 
-# Пользователь выбрал раздел Одежда. перешел в меню раздела. 
-# Здесь все варианты выбора кнопок из первого уровня меню
-
+# --- ОБРАБОТЧИК ДЛЯ ТЕКСТОВЫХ СООБЩЕНИЙ ---
 @bot.message_handler(content_types='text')
-def start(message):
-    if (message.text == 'Одежда'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        btn1a = types.KeyboardButton('Футболки')
-        btn2a = types.KeyboardButton('Шорты')
-        btn3a = types.KeyboardButton('Вратарская форма')
-        back = types.KeyboardButton('Назад')
-        markup.add(btn1a,btn2a,btn3a, back)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup)
-    elif (message.text == 'Обувь'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        btn1b = types.KeyboardButton('Бутсы')
-        btn2b = types.KeyboardButton('Футзалки')
-        btn3b = types.KeyboardButton('Кроссовки')
-        back = types.KeyboardButton('Назад')
-        markup.add(btn1b,btn2b,btn3b, back)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup)
-    elif (message.text == 'Аксессуары'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        btn1c = types.KeyboardButton('Перчатки')
-        btn2c = types.KeyboardButton('Мячи')
-        btn3c = types.KeyboardButton('Щитки')
-        back = types.KeyboardButton('Назад')
-        markup.add(btn1c,btn2c,btn3c, back)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup)
+def handle_text_messages(message):
+    """Обрабатывает текстовые сообщения пользователя."""
+    initial_reply_thread_id = None
+    if message.reply_to_message and \
+       message.reply_to_message.forward_from_chat and \
+       message.reply_to_message.forward_from_chat.type == 'channel':
+        initial_reply_thread_id = message.message_id # ID самого текстового сообщения
+    
+    # Определяем ID сообщения, на которое нужно ответить (ID самого текстового сообщения пользователя)
+    reply_id = initial_reply_thread_id
 
-    elif (message.text == 'Контакты'):
+    if any(word in message.text.lower() for word in ['купить', 'покупка', 'заказать']):
         description = (
-                "Адреса магазинов\n"
-                "Санкт-Петербург: адрес\n"
-                "Телефон магазина: +7 999 999 99 99\n\n"
-                "Омск: адрес \n"
-                "Телефон магазина: +7 999 999 99 99\n\n"
-                "Соцеальные сети:\n"
-                "Вконтакте: https://vk.com/jomaomsk\n"
-                "Telegram: https://t.me/jomasiberia\n"
+                "Контакты менеджеров\n\n"
+                "Владислав:\n"
+                "Телефон: +7 923 676 3389\n\n"
+                "Сергей:\n"
+                "Телефон: +7 923 048 8553\n"
+                "Telegram: https://t.me/shyctruk\n"
             )
-        bot.send_message(message.chat.id, description)
+        send_message_unified(
+            chat_id=message.chat.id,
+            text=description,
+            reply_to_message_id=reply_id # Отвечаем на исходный текст
+        )
+    else:
+        markup = get_main_inline_markup(initial_reply_thread_id) # Передаем thread_id в кнопки
+        send_message_unified(
+            chat_id=message.chat.id,
+            text="Я не понял ваш запрос. Пожалуйста, используйте кнопки меню:",
+            reply_markup=markup,
+            reply_to_message_id=reply_id # Отвечаем на исходный текст
+        )
 
+# --- ОБРАБОТЧИК ДЛЯ INLINE-КНОПОК (CallbackQuery) ---
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callback_query(call):
+    """Обрабатывает нажатия на Inline-кнопки."""
+    bot.answer_callback_query(call.id)
 
-# кнопка возвращяет на первое меню        
-    elif (message.text == 'Назад'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
-        btn1 = types.KeyboardButton('Одежда')
-        btn2 = types.KeyboardButton('Обувь')
-        btn3 = types.KeyboardButton('Аксессуары')
-        markup.add(btn1,btn2,btn3)
-        bot.send_message(message.chat.id, "Привет, выберите категорию.", reply_markup=markup)   
+    chat_id = call.message.chat.id
+    message_id_to_edit = call.message.message_id
 
+    # Парсим данные из callback_data
+    callback_data_parsed = parse_callback_data(call.data)
+    
+    # Извлекаем сохраненный reply_thread_id. Если его нет, то None (для приватного чата)
+    reply_to_thread_id = callback_data_parsed.get("t") 
+    
+    prefix = callback_data_parsed["p"]
+    value = callback_data_parsed["v"]
 
+    # --- ЛОГИКА ОБРАБОТКИ НАЖАТИЙ КНОПОК ---
+    if prefix == PREFIX_CATEGORY:
+        if value == "clothes":
+            markup = get_product_soon_inline_markup(reply_to_thread_id)
+            edit_message_text_unified(
+                chat_id=chat_id,
+                message_id=message_id_to_edit,
+                text="Раздел 'Одежда'. Товар скоро появится.",
+                reply_markup=markup
+            )
+        elif value == "shoes":
+            markup = get_shoes_inline_markup(reply_to_thread_id) # Теперь ведет к подменю DRIBLING/MUNDIAL
+            edit_message_text_unified(
+                chat_id=chat_id,
+                message_id=message_id_to_edit,
+                text="Раздел 'Обувь'. Выберите тип футзалок:",
+                reply_markup=markup
+            )
+        elif value == "accessories":
+            markup = get_product_soon_inline_markup(reply_to_thread_id)
+            edit_message_text_unified(
+                chat_id=chat_id,
+                message_id=message_id_to_edit,
+                text="Раздел 'Аксессуары'. Товар скоро появится.",
+                reply_markup=markup
+            )
+    elif prefix == PREFIX_SUBCATEGORY: # Обработка новой подкатегории
+        if value == "dribling":
+            markup = get_dribling_shoes_inline_markup(reply_to_thread_id)
+            edit_message_text_unified(
+                chat_id=chat_id,
+                message_id=message_id_to_edit,
+                text="Футзалки JOMA DRIBLING. Выберите модель:",
+                reply_markup=markup
+            )
+        elif value == "mundial":
+            markup = get_mundial_shoes_inline_markup(reply_to_thread_id)
+            edit_message_text_unified(
+                chat_id=chat_id,
+                message_id=message_id_to_edit,
+                text="Футзалки JOMA MUNDIAL. Выберите модель:",
+                reply_markup=markup
+            )
+    elif prefix == PREFIX_ACTION:
+        if value == ACTION_CONTACTS:
+            description = (
+                    "Адреса магазинов\n"
+                    "Санкт-Петербург: 7-я Красноармейская улица, 11\n"
+                    "Телефон магазина: +7‒950‒008‒10‒46|+7‒960‒990‒11‒55\n\n"
+                    "Омск: ул. Маршала Жукова, 101/1\n"
+                    "Телефон магазина: +7 (800) 201-06-19|+7 (923) 678-83-64\n\n"
+                    "Социальные сети:\n"
+                    "Вконтакте: https://vk.com/jomaomsk\n"
+                    "Telegram: https://t.me/jomasiberia\n"
+                )
+            send_message_unified(
+                chat_id=chat_id,
+                text=description,
+                reply_to_message_id=reply_to_thread_id # Используем сохраненный ID
+            )
+        elif value == ACTION_BACK_MAIN_MENU:
+            markup = get_main_inline_markup(reply_to_thread_id)
+            edit_message_text_unified(
+                chat_id=chat_id,
+                message_id=message_id_to_edit,
+                text="Возвращаюсь в главное меню. Выберите категорию:",
+                reply_markup=markup
+            )
+        elif value == ACTION_BACK_SHOES_MENU: # Новое действие: назад в меню обуви
+            markup = get_shoes_inline_markup(reply_to_thread_id)
+            edit_message_text_unified(
+                chat_id=chat_id,
+                message_id=message_id_to_edit,
+                text="Возвращаюсь в раздел 'Обувь'. Выберите тип футзалок:",
+                reply_markup=markup
+            )
+        elif value == ACTION_PRODUCT_SOON:
+            markup = get_main_inline_markup(reply_to_thread_id)
+            edit_message_text_unified(
+                chat_id=chat_id,
+                message_id=message_id_to_edit,
+                text="Возвращаюсь в главное меню. Выберите категорию:",
+                reply_markup=markup
+            )
+    elif prefix == PREFIX_PRODUCT:
+        product_code = value
+        send_product_info(chat_id, product_code, reply_to_thread_id)
+    else:
+        markup = get_main_inline_markup(reply_to_thread_id)
+        edit_message_text_unified(
+            chat_id=chat_id,
+            message_id=message_id_to_edit,
+            text="Неизвестная команда. Пожалуйста, используйте кнопки меню.",
+            reply_markup=markup
+        )
 
-# 3 блока для менб радела одежда.
-# пользователь выбрал Футболки во втором меню. ему на выбор предоставляются актуальные футболки                
-    elif (message.text == 'Футболки'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        foot1 = types.KeyboardButton('Футболка Joma Gold VII')
-        foot2 = types.KeyboardButton('Футболка 1')
-        foot3 = types.KeyboardButton('Футболка 2')
-        back1 = types.KeyboardButton('\u21A9 Назад')
-        markup.add(foot1, foot2, foot3, back1)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup)
+# --- Функция для отправки информации о товаре ---
+def send_product_info(chat_id, product_code, reply_to_message_id):
+    """
+    Отправляет фотографии и описание товара.
+    Получает reply_to_message_id для привязки к нужной ветке.
+    """
+    photo_paths = []
+    description = ""
+    
+    keyboard_contact = types.InlineKeyboardMarkup()
+    keyboard_contact.add(types.InlineKeyboardButton("📨 Написать", url="https://t.me/shyctruk"))
 
-# пользователь выбрал раздел шорты и попал в меню выбора товара
-    elif (message.text == 'Шорты'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        short1 = types.KeyboardButton('Шорты 1')
-        short2 = types.KeyboardButton('Шорты 2')
-        short3 = types.KeyboardButton('Шорты 3')
-        back2 = types.KeyboardButton('\u21A9 Назад')
-        markup.add(short1, short2, short3, back2)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup)
-# пользователь выбрал раздел врт формы и попал в меню выбора товара
-    elif (message.text == 'Вратарская форма'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        vrateq1 = types.KeyboardButton('Форма 1')
-        vrateq2 = types.KeyboardButton('Форма 2')
-        vrateq3 = types.KeyboardButton('Форма 3')
-        back3 = types.KeyboardButton('\u21A9 Назад')
-        markup.add(vrateq1, vrateq2, vrateq3, back3)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup)    
-    elif (message.text == '\u21A9 Назад'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        btn1a = types.KeyboardButton('Футболки')
-        btn2a = types.KeyboardButton('Шорты')
-        btn3a = types.KeyboardButton('Вратарская форма')
-        back = types.KeyboardButton('Назад')
-        markup.add(btn1a,btn2a,btn3a, back)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup)
+    # Ваша логика для загрузки фото и описания в зависимости от product_code
+    if product_code == 'DRIS2301IN':
+        photo_paths = ['media/futzalki/DRIS2301IN/1.jpg', 'media/futzalki/DRIS2301IN/2.jpg', 'media/futzalki/DRIS2301IN/3.jpg']
+        description = (
+            "Футзалки DRIBLING DRIS2301IN\n"
+            "Артикул: DRIS2301IN\n"
+            "Бренд: Joma\n"
+            "Размеры: 39, 40, 40.5, 41, 42, 42.5, 43, 43.5, 44, 44.5, 45\n"
+            "\u274CСтарая цена: 4990 руб. \n"
+            "\u2714Новая цена: 3990 руб. \n\n"
+            "Эта футзальная модель изготовлена ​​из прочных материалов и подходит для любого поля. С этой универсальной обувью любое место может стать футбольным полем. Воздухопроницаемость, устойчивость и сопротивление являются результатом идеального сочетания синтетического материала и сетчатой ​​сетки, из которой сделана верхняя часть.\n\n"
+            "📞 Позвонить: +7 (923) 678-83-64\n"
+        )
+    elif product_code == 'DRIS2303IN':
+        photo_paths = ['media/futzalki/DRIS2303IN/1.jpg', 'media/futzalki/DRIS2303IN/2.jpg', 'media/futzalki/DRIS2303IN/3.jpg']
+        description = (
+            "Футзалки DRIBLING DRIS2303IN\n"
+            "Артикул: DRIS2303IN\n"
+            "Бренд: Joma\n"
+            "Размеры: 40, 40.5, 41, 42, 42.5, 43 43.5, 44, 44.5\n"
+            "\u274CСтарая цена: 4990 руб. \n"
+            "\u2714Новая цена: 3990 руб. \n\n"
+            "Эта футзальная модель изготовлена ​​из прочных материалов и подходит для любого поля. С этой универсальной обувью любое место может стать футбольным полем. Воздухопроницаемость, устойчивость и сопротивление являются результатом идеального сочетания синтетического материала и сетчатой ​​сетки, из которой сделана верхняя часть.\n\n"
+            "📞 Позвонить: +7 (923) 678-83-64\n"
+        )
+    elif product_code == 'DRIS2309IN':
+        photo_paths = ['media/futzalki/DRIS2309IN/1.jpg', 'media/futzalki/DRIS2309IN/2.jpg', 'media/futzalki/DRIS2309IN/3.jpg']
+        description = (
+            "Футзалки DRIBLING DRIS2309IN\n"
+            "Артикул: DRIS2309IN\n"
+            "Бренд: Joma\n"
+            "Размеры: 42, 43, 44, 45\n"
+            "\u274CСтарая цена: 4990 руб. \n"
+            "\u2714Новая цена: 3990 руб. \n\n"
+            "Эта футзальная модель изготовлена ​​из прочных материалов и подходит для любого поля. С этой универсальной обувью любое место может стать футбольным полем. Воздухопроницаемость, устойчивость и сопротивление являются результатом идеального сочетания синтетического материала и сетчатой ​​сетки, из которой сделана верхняя часть.\n\n"
+            "📞 Позвонить: +7 (923) 678-83-64\n"
+        )
+    elif product_code == 'MUNS2302IN':
+        photo_paths = ['media/futzalki/MUNS2302IN/1.jpg', 'media/futzalki/MUNS2302IN/2.jpg', 'media/futzalki/MUNS2302IN/3.jpg']
+        description = (
+            "Футзалки JOMA MUNDIAL MUNS2302IN\n"
+            "Артикул: MUNS2302IN\n"
+            "Бренд: Joma\n"
+            "Размеры: 42.5, 43, 43.5, 44, 44.5\n"
+            "\u274CСтарая цена: 4990 руб. \n"
+            "\u2714Новая цена: 3990 руб. \n\n"
+            "Классическая модель, выполненная из комбинации кожи, замши и синтетических материалов, что обеспечивает лучший контакт с мячом и износостойкость.\n\n"
+            "📞 Позвонить: +7 (923) 678-83-64\n"
+        )
+    elif product_code == 'MUNS2328IN':
+        photo_paths = ['media/futzalki/MUNS2328IN/1.jpg', 'media/futzalki/MUNS2328IN/2.jpg', 'media/futzalki/MUNS2328IN/3.jpg']
+        description = (
+            "Футзалки MUNDIAL MUNS2328IN\n"
+            "Артикул: MUNS2328IN\n"
+            "Бренд: Joma\n"
+            "Размеры: 40, 40.5, 42, 42.5, 43, 43.5, 44\n"
+            "\u274CСтарая цена: 4990 руб. \n"
+            "\u2714Новая цена: 3990 руб. \n\n"
+            "Классическая модель, выполненная из комбинации кожи, замши и синтетических материалов, что обеспечивает лучший контакт с мячом и износостойкость.\n\n"
+            "📞 Позвонить: +7 (923) 678-83-64\n"
+        )
+    elif product_code == 'MUNS2304IN':
+        photo_paths = ['media/futzalki/MUNS2304IN/1.jpg', 'media/futzalki/MUNS2304IN/2.jpg', 'media/futzalki/MUNS2304IN/3.jpg']
+        description = (
+            "Футзалки JOMA MUNDIAL MUNS2304IN\n"
+            "Артикул: MUNS2304IN\n"
+            "Бренд: Joma\n"
+            "Размеры: 39, 40, 40.5, 42.5, 43, 43.5, 44, 44.5\n"
+            "\u274CСтарая цена: 4990 руб. \n"
+            "\u2714Новая цена: 3990 руб. \n\n"
+            "Классическая модель, выполненная из комбинации кожи, замши и синтетических материалов, что обеспечивает лучший контакт с мячом и износостойкость.\n\n"
+            "📞 Позвонить: +7 (923) 678-83-64\n"
+        )
+    elif product_code == 'Футболка Joma Gold VII':
+        photo_paths = ['media/t-shorts/gold 7/1.jpg', 'media/t-shorts/gold 7/2.jpg', 'media/t-shorts/gold 7/3.jpg']
+        description = (
+            "CAMISETA MANGA CORTA GOLD VII NEGRO BLANCO\n"
+            "Артикул: 104488.102\n"
+            "Размеры: S, M, L, XL, 2XL\n"
+            "Цена: 5126 руб. \n\n"
+            "Рубашка с короткими рукавами идеально подходит для занятий различными видами спорта, такими как футбол, баскетбол, гандбол, мини-футбол и другими.\n\n"
+            "📞 Позвонить: +7 (923) 678-83-64\n"
+        )
+    else:
+        send_message_unified(
+            chat_id=chat_id,
+            text="Информация о товаре не найдена.",
+            reply_to_message_id=reply_to_message_id
+        )
+        return
 
-
-# 3 блока для менб раздела обувь
-# пользователь выбрал раздел бутсы и попал в меню выбора товара
-    elif (message.text == 'Бутсы'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        bytsi1 = types.KeyboardButton('Бутсы 1')
-        bytsi2 = types.KeyboardButton('Бутсы 2')
-        bytsi3 = types.KeyboardButton('Бутсы 3')
-        back4 = types.KeyboardButton('\U0001F519 Назад')
-        markup.add(bytsi1, bytsi2, bytsi3, back4)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup) 
-# пользователь выбрал раздел футзалки и попал в меню выбора товара
-    elif (message.text == 'Футзалки'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        fuatzal1 = types.KeyboardButton('DRIS2301IN')
-        fuatzal2 = types.KeyboardButton('DRIS2303IN')
-        fuatzal3 = types.KeyboardButton('DRIS2309IN')
-        fuatzal4 = types.KeyboardButton('MUNS2302IN')
-        fuatzal5 = types.KeyboardButton('MUNS2328IN')
-        fuatzal6 = types.KeyboardButton('MUNS2304IN')
+    # Отправка фотографий
+    opened_photos = []
+    try:
+        media = []
+        for path in photo_paths:
+            photo_file = open(path, 'rb')
+            opened_photos.append(photo_file)
+            media.append(types.InputMediaPhoto(photo_file))
         
-        back4 = types.KeyboardButton('\U0001F519 Назад')
-        markup.add(fuatzal1, fuatzal2, fuatzal3, fuatzal4, fuatzal5, fuatzal6, back4)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup) 
-# пользователь выбрал раздел кроссовки и попал в меню выбора товара
-    elif (message.text == 'Кроссовки'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        kross1 = types.KeyboardButton('Кроссовки 1')
-        kross2 = types.KeyboardButton('Кроссовки 2')
-        kross3 = types.KeyboardButton('Кроссовки 3')
-        back4 = types.KeyboardButton('\U0001F519 Назад')
-        markup.add(kross1, kross2, kross3, back4)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup)         
-    elif (message.text == '\U0001F519 Назад'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        btn1b = types.KeyboardButton('Бутсы')
-        btn2b = types.KeyboardButton('Футзалки')
-        btn3b = types.KeyboardButton('Кроссовки')
-        back = types.KeyboardButton('Назад')
-        markup.add(btn1b,btn2b,btn3b, back)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup)
+        send_media_group_unified(
+            chat_id=chat_id,
+            media=media,
+            reply_to_message_id=reply_to_message_id
+        )
 
-
-# 3 блока условий для раздела аксессуары 
-# пользователь перчатки выбрал раздел и попал в меню выбора товара
-    elif (message.text == 'Перчатки'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        perch1 = types.KeyboardButton('Перчатки 1')
-        perch2 = types.KeyboardButton('Перчатки 2')
-        perch3 = types.KeyboardButton('Перчатки 3')
-        back5 = types.KeyboardButton('\u23EE Назад')
-        markup.add(perch1, perch2, perch3, back5)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup) 
-# пользователь мячи выбрал раздел и попал в меню выбора товара
-    elif (message.text == 'Мячи'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        boal1 = types.KeyboardButton('Мячи 1')
-        boal2 = types.KeyboardButton('Мячи 2')
-        boal3 = types.KeyboardButton('Мячи 3')
-        back5 = types.KeyboardButton('\u23EE Назад')
-        markup.add(boal1, boal2, boal3, back5)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup) 
-# пользователь щетки выбрал раздел и попал в меню выбора товара
-    elif (message.text == 'Щитки'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        chetki1 = types.KeyboardButton('Щитки 1')
-        chetki2 = types.KeyboardButton('Щитки 2')
-        chetki3 = types.KeyboardButton('Щитки 3')
-        back5 = types.KeyboardButton('\u23EE Назад')
-        markup.add(chetki1, chetki2, chetki3, back5)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup) 
-    elif (message.text == '\u23EE Назад'):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        btn1c = types.KeyboardButton('Перчатки')
-        btn2c = types.KeyboardButton('Мячи')
-        btn3c = types.KeyboardButton('Щитки')
-        back = types.KeyboardButton('Назад')
-        markup.add(btn1c,btn2c,btn3c, back)
-        bot.send_message(message.from_user.id, "Выберите раздел", reply_markup=markup)
-
-
-
-### пользователь выбрал футболку. он должен получить в ответ: фотографии футболок, полное название, цену,
-# описание товара, варианты цветов, вывести 2 кнопки с телефоном и id менеджера.        
-
-# товары в разделе футболки    
-    elif (message.text == 'Футболка Joma Gold VII'):
-        photo1 = open('media/t-shorts/gold 7/1.jpg', 'rb')
-        photo2 = open('media/t-shorts/gold 7/2.jpg', 'rb')
-        photo3 = open('media/t-shorts/gold 7/3.jpg', 'rb')
-
-        try:
-            media = [
-                types.InputMediaPhoto(photo1),
-                types.InputMediaPhoto(photo2),
-                types.InputMediaPhoto(photo3)
-            ]
-            
-            bot.send_media_group(message.chat.id, media)
-            #time.sleep(0.5)
-            description = (
-                "CAMISETA MANGA CORTA GOLD VII NEGRO BLANCO\n"
-                "Артикул: 104488.102\n"
-                "Размеры: S, M, L, XL, 2XL\n"
-                "Цена: 5126 руб. \n\n"
-                "Рубашка с короткими рукавами идеально подходит для занятий различными видами спорта, такими как футбол, баскетбол, гандбол, мини-футбол и другими.\n\n"
-                "📞 Позвонить: +7 (923) 678-83-64\n"
-            )
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.add(types.InlineKeyboardButton("📨 Написать", url="https://t.me/shyctruk"))
-            bot.send_message(
-                message.chat.id,
-                description,
-                reply_markup=keyboard,
-                parse_mode="Markdown"
-            )
-        finally:
-            photo1.close()
-            photo2.close()
-            photo3.close()
-
-# раздел с футзалками            
-    elif (message.text == 'DRIS2301IN'):
-        photo1 = open('media/futzalki/DRIS2301IN/1.jpg', 'rb')
-        photo2 = open('media/futzalki/DRIS2301IN/2.jpg', 'rb')
-        photo3 = open('media/futzalki/DRIS2301IN/3.jpg', 'rb')
-
-        try:
-            media = [
-                types.InputMediaPhoto(photo1),
-                types.InputMediaPhoto(photo2),
-                types.InputMediaPhoto(photo3)
-            ]
-            
-            bot.send_media_group(message.chat.id, media)
-            #time.sleep(0.5)
-            description = (
-                "Футзалки DRIBLING DRIS2301IN\n"
-                "Артикул: DRIS2301IN\n"
-                "Бренд: Joma\n"
-                "Размеры: 39, 40, 40.5, 41, 42, 42.5, 43, 43.5, 44, 44.5, 45\n"
-                "\u274CСтарая цена: 4990 руб. \n"
-                "\u2714Новая цена: 3990 руб. \n\n"
-                "Эта футзальная модель изготовлена ​​из прочных материалов и подходит для любого поля. С этой универсальной обувью любое место может стать футбольным полем. Воздухопроницаемость, устойчивость и сопротивление являются результатом идеального сочетания синтетического материала и сетчатой ​​сетки, из которой сделана верхняя часть.\n\n"
-                "📞 Позвонить: +7 (923) 678-83-64\n"
-            )
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.add(types.InlineKeyboardButton("📨 Написать", url="https://t.me/shyctruk"))
-            bot.send_message(
-                message.chat.id,
-                description,
-                reply_markup=keyboard,
-                parse_mode="Markdown"
-            )
-        finally:
-            photo1.close()
-            photo2.close()
-            photo3.close()
-
-
-# второй товар в разделе футзалки
-    elif (message.text == 'DRIS2303IN'):
-        photo1 = open('media/futzalki/DRIS2303IN/1.jpg', 'rb')
-        photo2 = open('media/futzalki/DRIS2303IN/2.jpg', 'rb')
-        photo3 = open('media/futzalki/DRIS2303IN/3.jpg', 'rb')
-
-        try:
-            media = [
-                types.InputMediaPhoto(photo1),
-                types.InputMediaPhoto(photo2),
-                types.InputMediaPhoto(photo3)
-            ]
-            
-            bot.send_media_group(message.chat.id, media)
-            #time.sleep(0.5)
-            description = (
-                "Футзалки DRIBLING DRIS2303IN\n"
-                "Артикул: DRIS2303IN\n"
-                "Бренд: Joma\n"
-                "Размеры: 40, 40.5, 41, 42, 42.5, 43 43.5, 44, 44.5\n"
-                "\u274CСтарая цена: 4990 руб. \n"
-                "\u2714Новая цена: 3990 руб. \n\n"
-                "Эта футзальная модель изготовлена ​​из прочных материалов и подходит для любого поля. С этой универсальной обувью любое место может стать футбольным полем. Воздухопроницаемость, устойчивость и сопротивление являются результатом идеального сочетания синтетического материала и сетчатой ​​сетки, из которой сделана верхняя часть.\n\n"
-                "📞 Позвонить: +7 (923) 678-83-64\n"
-            )
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.add(types.InlineKeyboardButton("📨 Написать", url="https://t.me/shyctruk"))
-            bot.send_message(
-                message.chat.id,
-                description,
-                reply_markup=keyboard,
-                parse_mode="Markdown"
-            )
-        finally:
-            photo1.close()
-            photo2.close()
-            photo3.close()          
-
-# третий товар в разделе футзалки
-    elif (message.text == 'DRIS2309IN'):
-        photo1 = open('media/futzalki/DRIS2309IN/1.jpg', 'rb')
-        photo2 = open('media/futzalki/DRIS2309IN/2.jpg', 'rb')
-        photo3 = open('media/futzalki/DRIS2309IN/3.jpg', 'rb')
-
-        try:
-            media = [
-                types.InputMediaPhoto(photo1),
-                types.InputMediaPhoto(photo2),
-                types.InputMediaPhoto(photo3)
-            ]
-            
-            bot.send_media_group(message.chat.id, media)
-            #time.sleep(0.5)
-            description = (
-                "Футзалки DRIBLING DRIS2309IN\n"
-                "Артикул: DRIS2309IN\n"
-                "Бренд: Joma\n"
-                "Размеры: 42, 43, 44, 45\n"
-                "\u274CСтарая цена: 4990 руб. \n"
-                "\u2714Новая цена: 3990 руб. \n\n"
-                "Эта футзальная модель изготовлена ​​из прочных материалов и подходит для любого поля. С этой универсальной обувью любое место может стать футбольным полем. Воздухопроницаемость, устойчивость и сопротивление являются результатом идеального сочетания синтетического материала и сетчатой ​​сетки, из которой сделана верхняя часть.\n\n"
-                "📞 Позвонить: +7 (923) 678-83-64\n"
-            )
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.add(types.InlineKeyboardButton("📨 Написать", url="https://t.me/shyctruk"))
-            bot.send_message(
-                message.chat.id,
-                description,
-                reply_markup=keyboard,
-                parse_mode="Markdown"
-            )
-        finally:
-            photo1.close()
-            photo2.close()
-            photo3.close()
-# 4 товар в разделе футзалки
-    elif (message.text == 'MUNS2302IN'):
-        photo1 = open('media/futzalki/MUNS2302IN/1.jpg', 'rb')
-        photo2 = open('media/futzalki/MUNS2302IN/2.jpg', 'rb')
-        photo3 = open('media/futzalki/MUNS2302IN/3.jpg', 'rb')
-
-        try:
-            media = [
-                types.InputMediaPhoto(photo1),
-                types.InputMediaPhoto(photo2),
-                types.InputMediaPhoto(photo3)
-            ]
-            
-            bot.send_media_group(message.chat.id, media)
-            #time.sleep(0.5)
-            description = (
-                "Футзалки JOMA MUNDIAL MUNS2302IN\n"
-                "Артикул: MUNS2302IN\n"
-                "Бренд: Joma\n"
-                "Размеры: 42.5, 43, 43.5, 44, 44.5\n"
-                "\u274CСтарая цена: 4990 руб. \n"
-                "\u2714Новая цена: 3990 руб. \n\n"
-                "Классическая модель, выполненная из комбинации кожи, замши и синтетических материалов, что обеспечивает лучший контакт с мячом и износостойкость.\n\n"
-                "📞 Позвонить: +7 (923) 678-83-64\n"
-            )
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.add(types.InlineKeyboardButton("📨 Написать", url="https://t.me/shyctruk"))
-            bot.send_message(
-                message.chat.id,
-                description,
-                reply_markup=keyboard,
-                parse_mode="Markdown"
-            )
-        finally:
-            photo1.close()
-            photo2.close()
-            photo3.close()
-
-# 5 товар в разделе футзалки
-    elif (message.text == 'MUNS2328IN'):
-        photo1 = open('media/futzalki/MUNS2328IN/1.jpg', 'rb')
-        photo2 = open('media/futzalki/MUNS2328IN/2.jpg', 'rb')
-        photo3 = open('media/futzalki/MUNS2328IN/3.jpg', 'rb')
-
-        try:
-            media = [
-                types.InputMediaPhoto(photo1),
-                types.InputMediaPhoto(photo2),
-                types.InputMediaPhoto(photo3)
-            ]
-            
-            bot.send_media_group(message.chat.id, media)
-            #time.sleep(0.5)
-            description = (
-                "Футзалки MUNDIAL MUNS2328IN\n"
-                "Артикул: MUNS2328IN\n"
-                "Бренд: Joma\n"
-                "Размеры: 40, 40.5, 42, 42.5, 43, 43.5, 44\n"
-                "\u274CСтарая цена: 4990 руб. \n"
-                "\u2714Новая цена: 3990 руб. \n\n"
-                "Классическая модель, выполненная из комбинации кожи, замши и синтетических материалов, что обеспечивает лучший контакт с мячом и износостойкость.\n\n"
-                "📞 Позвонить: +7 (923) 678-83-64\n"
-            )
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.add(types.InlineKeyboardButton("📨 Написать", url="https://t.me/shyctruk"))
-            bot.send_message(
-                message.chat.id,
-                description,
-                reply_markup=keyboard,
-                parse_mode="Markdown"
-            )
-        finally:
-            photo1.close()
-            photo2.close()
-            photo3.close()
-
-# 6 товар в разделе футзалки
-    elif (message.text == 'MUNS2304IN'):
-        photo1 = open('media/futzalki/MUNS2304IN/1.jpg', 'rb')
-        photo2 = open('media/futzalki/MUNS2304IN/2.jpg', 'rb')
-        photo3 = open('media/futzalki/MUNS2304IN/3.jpg', 'rb')
-
-        try:
-            media = [
-                types.InputMediaPhoto(photo1),
-                types.InputMediaPhoto(photo2),
-                types.InputMediaPhoto(photo3)
-            ]
-            
-            bot.send_media_group(message.chat.id, media)
-            #time.sleep(0.5)
-            description = (
-                "Футзалки JOMA MUNDIAL MUNS2304IN\n"
-                "Артикул: MUNS2304IN\n"
-                "Бренд: Joma\n"
-                "Размеры: 39, 40, 40.5, 42.5, 43, 43.5, 44, 44.5\n"
-                "\u274CСтарая цена: 4990 руб. \n"
-                "\u2714Новая цена: 3990 руб. \n\n"
-                "Классическая модель, выполненная из комбинации кожи, замши и синтетических материалов, что обеспечивает лучший контакт с мячом и износостойкость.\n\n"
-                "📞 Позвонить: +7 (923) 678-83-64\n"
-            )
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.add(types.InlineKeyboardButton("📨 Написать", url="https://t.me/shyctruk"))
-            bot.send_message(
-                message.chat.id,
-                description,
-                reply_markup=keyboard,
-                parse_mode="Markdown"
-            )
-        finally:
-            photo1.close()
-            photo2.close()
-            photo3.close()
-
-
-
-
+        send_message_unified(
+            chat_id=chat_id,
+            text=description,
+            reply_markup=keyboard_contact,
+            parse_mode="Markdown",
+            reply_to_message_id=reply_to_message_id
+        )
+    except Exception as e:
+        print(f"Ошибка при отправке медиа или сообщения: {e}")
+        send_message_unified(
+            chat_id=chat_id,
+            text="Произошла ошибка при загрузке информации о товаре.",
+            reply_to_message_id=reply_to_message_id
+        )
+    finally:
+        for f in opened_photos:
+            f.close()
 
 bot.polling(non_stop=True)
