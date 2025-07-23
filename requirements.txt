@@ -1,2 +1,1 @@
 pyTelegramBotAPI==4.27.0
-json==3.11.3
