@@ -1,7 +1,7 @@
 import telebot
 from telebot import types
 import json # Для кодирования/декодирования сложных callback_data
-
+from flask import Flask
 bot = telebot.TeleBot('8019074887:AAGZgIX9_60PnQtrhdjB_5hqncaMS9KmpHo') # Вставьте ваш токен
 
 # --- Константы для CallbackData ---
@@ -146,41 +146,53 @@ def handle_start(message):
         reply_to_message_id=initial_reply_thread_id # Отвечаем на исходный комментарий
     )
 
-# --- ОБРАБОТЧИК ДЛЯ ТЕКСТОВЫХ СООБЩЕНИЙ ---
-@bot.message_handler(content_types='text')
-def handle_text_messages(message):
-    """Обрабатывает текстовые сообщения пользователя."""
+# --- ОБРАБОТЧИК ДЛЯ ТЕКСТОВЫХ СООБЩЕНИЙ, НАЧИНАЮЩИХ РАБОТУ БОТА ---
+@bot.message_handler(func=lambda message: any(word in message.text.lower() for word in ['бот', 'одежда', 'обувь', 'аксессуары' 'каталог', 'старт', 'начать']))
+def handle_activation_words(message):
+    """Обрабатывает активационные слова для запуска бота."""
     initial_reply_thread_id = None
     if message.reply_to_message and \
        message.reply_to_message.forward_from_chat and \
        message.reply_to_message.forward_from_chat.type == 'channel':
         initial_reply_thread_id = message.message_id # ID самого текстового сообщения
-    
-    # Определяем ID сообщения, на которое нужно ответить (ID самого текстового сообщения пользователя)
-    reply_id = initial_reply_thread_id
 
-    if any(word in message.text.lower() for word in ['купить', 'покупка', 'заказать']):
-        description = (
-                "Контакты менеджеров\n\n"
-                "Владислав:\n"
-                "Телефон: +7 923 676 3389\n\n"
-                "Сергей:\n"
-                "Телефон: +7 923 048 8553\n"
-                "Telegram: https://t.me/shyctruk\n"
-            )
-        send_message_unified(
-            chat_id=message.chat.id,
-            text=description,
-            reply_to_message_id=reply_id # Отвечаем на исходный текст
-        )
-    else:
-        markup = get_main_inline_markup(initial_reply_thread_id) # Передаем thread_id в кнопки
-        send_message_unified(
-            chat_id=message.chat.id,
-            text="Я не понял ваш запрос. Пожалуйста, используйте кнопки меню:",
-            reply_markup=markup,
-            reply_to_message_id=reply_id # Отвечаем на исходный текст
-        )
+    markup = get_main_inline_markup(initial_reply_thread_id) # Передаем thread_id в кнопки
+    send_message_unified(
+        chat_id=message.chat.id,
+        text="Привет! Выберите категорию, используя кнопки:",
+        reply_markup=markup,
+        reply_to_message_id=initial_reply_thread_id # Отвечаем на исходный текст
+    )
+
+# --- ОБРАБОТЧИК ДЛЯ ТЕКСТОВЫХ СООБЩЕНИЙ О ПОКУПКЕ ---
+@bot.message_handler(func=lambda message: any(word in message.text.lower() for word in ['купить', 'покупка', 'заказать']))
+def handle_purchase_inquiry(message):
+    """Обрабатывает запросы пользователя, связанные с покупкой."""
+    initial_reply_thread_id = None
+    if message.reply_to_message and \
+       message.reply_to_message.forward_from_chat and \
+       message.reply_to_message.forward_from_chat.type == 'channel':
+        initial_reply_thread_id = message.message_id
+
+    description = (
+        "Контакты менеджеров\n\n"
+        "Владислав:\n"
+        "Телефон: +7 923 676 3389\n\n"
+        "Сергей:\n"
+        "Телефон: +7 923 048 8553\n"
+        "Telegram: https://t.me/shyctruk\n"
+    )
+    send_message_unified(
+        chat_id=message.chat.id,
+        text=description,
+        reply_to_message_id=initial_reply_thread_id
+    )
+
+# --- ОБРАБОТЧИК ДЛЯ ВСЕХ ОСТАЛЬНЫХ ТЕКСТОВЫХ СООБЩЕНИЙ ---
+@bot.message_handler(content_types='text')
+def handle_unrecognized_text_messages(message):
+    """Обрабатывает любые другие текстовые сообщения, на которые бот не должен отвечать автоматически."""
+    pass # Бот не будет отвечать на эти сообщения
 
 # --- ОБРАБОТЧИК ДЛЯ INLINE-КНОПОК (CallbackQuery) ---
 @bot.callback_query_handler(func=lambda call: True)
@@ -195,7 +207,7 @@ def handle_callback_query(call):
     callback_data_parsed = parse_callback_data(call.data)
     
     # Извлекаем сохраненный reply_thread_id. Если его нет, то None (для приватного чата)
-    reply_to_thread_id = callback_data_parsed.get("t") 
+    reply_to_thread_id = callback_data_parsed.get("t")    
     
     prefix = callback_data_parsed["p"]
     value = callback_data_parsed["v"]
@@ -246,15 +258,15 @@ def handle_callback_query(call):
     elif prefix == PREFIX_ACTION:
         if value == ACTION_CONTACTS:
             description = (
-                    "Адреса магазинов\n"
-                    "Санкт-Петербург: 7-я Красноармейская улица, 11\n"
-                    "Телефон магазина: +7‒950‒008‒10‒46|+7‒960‒990‒11‒55\n\n"
-                    "Омск: ул. Маршала Жукова, 101/1\n"
-                    "Телефон магазина: +7 (800) 201-06-19|+7 (923) 678-83-64\n\n"
-                    "Социальные сети:\n"
-                    "Вконтакте: https://vk.com/jomaomsk\n"
-                    "Telegram: https://t.me/jomasiberia\n"
-                )
+                "Адреса магазинов\n"
+                "Санкт-Петербург: 7-я Красноармейская улица, 11\n"
+                "Телефон магазина: +7‒950‒008‒10‒46|+7‒960‒990‒11‒55\n\n"
+                "Омск: ул. Маршала Жукова, 101/1\n"
+                "Телефон магазина: +7 (800) 201-06-19|+7 (923) 678-83-64\n\n"
+                "Социальные сети:\n"
+                "Вконтакте: https://vk.com/jomaomsk\n"
+                "Telegram: https://t.me/jomasiberia\n"
+            )
             send_message_unified(
                 chat_id=chat_id,
                 text=description,
@@ -285,7 +297,7 @@ def handle_callback_query(call):
                 reply_markup=markup
             )
     elif prefix == PREFIX_PRODUCT:
-       product_code = value
+        product_code = value
         send_product_info(chat_id, product_code, reply_to_thread_id)
     else:
         markup = get_main_inline_markup(reply_to_thread_id)
@@ -407,7 +419,7 @@ def send_product_info(chat_id, product_code, reply_to_message_id):
             photo_file = open(path, 'rb')
             opened_photos.append(photo_file)
             media.append(types.InputMediaPhoto(photo_file))
-        
+            
         send_media_group_unified(
             chat_id=chat_id,
             media=media,
