@@ -432,4 +432,24 @@ def send_product_info(chat_id, product_code, reply_to_message_id):
         for f in opened_photos:
             f.close()
 
-bot.polling(non_stop=True)
+from flask import Flask
+import threading
+
+def run_bot():
+    bot.polling(non_stop=True)
+
+def run_web():
+    app = Flask(__name__)
+
+    @app.route('/')
+    def index():
+        return 'Bot is running on Render!'
+
+    import os
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
+
+# Запускаем бот и Flask параллельно
+if __name__ == '__main__':
+    threading.Thread(target=run_bot).start()
+    run_web()
