@@ -178,9 +178,7 @@ def handle_purchase_inquiry(message):
         "Контакты менеджеров\n\n"
         "Владислав:\n"
         "Телефон: +7 923 676 3389\n\n"
-        "Сергей:\n"
-        "Телефон: +7 923 048 8553\n"
-        "Telegram: https://t.me/shyctruk\n"
+        
     )
     send_message_unified(
         chat_id=message.chat.id,
