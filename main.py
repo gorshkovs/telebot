@@ -315,8 +315,8 @@ def send_product_info(chat_id, product_code, reply_to_message_id):
     photo_paths = []
     description = ""
     
-    keyboard_contact = types.InlineKeyboardMarkup()
-    keyboard_contact.add(types.InlineKeyboardButton("📨 Написать", url="https://t.me/shyctruk"))
+#   keyboard_contact = types.InlineKeyboardMarkup()
+#    keyboard_contact.add(types.InlineKeyboardButton("📨 Написать", url="https://t.me/shyctruk"))
 
     # Ваша логика для загрузки фото и описания в зависимости от product_code
     if product_code == 'DRIS2301IN':
