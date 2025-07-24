@@ -427,7 +427,7 @@ def send_product_info(chat_id, product_code, reply_to_message_id):
         send_message_unified(
             chat_id=chat_id,
             text=description,
-#            reply_markup=keyboard_contact,
+            reply_markup=keyboard_contact,
             parse_mode="Markdown",
             reply_to_message_id=reply_to_message_id
         )
