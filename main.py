@@ -4,8 +4,6 @@ import json # Для кодирования/декодирования слож�
 from flask import Flask
 bot = telebot.TeleBot('8019074887:AAGZgIX9_60PnQtrhdjB_5hqncaMS9KmpHo') # Вставьте ваш токен
 
-# --- Константы для CallbackData ---
-# Используем префиксы для определения типа коллбэка
 PREFIX_CATEGORY = "cat_"
 PREFIX_SUBCATEGORY = "subcat_" # Новый префикс для подкатегорий
 PREFIX_PRODUCT = "prod_"
@@ -165,7 +163,7 @@ def handle_activation_words(message):
     )
 
 # --- ОБРАБОТЧИК ДЛЯ ТЕКСТОВЫХ СООБЩЕНИЙ О ПОКУПКЕ ---
-@bot.message_handler(func=lambda message: any(word in message.text.lower() for word in ['купить', 'покупка', 'заказать']))
+@bot.message_handler(func=lambda message: any(word in message.text.lower() for word in ['купить', 'покупка', 'заказать', 'цена']))
 def handle_purchase_inquiry(message):
     """Обрабатывает запросы пользователя, связанные с покупкой."""
     initial_reply_thread_id = None
@@ -177,8 +175,8 @@ def handle_purchase_inquiry(message):
     description = (
         "Контакты менеджеров\n\n"
         "Владислав:\n"
-        "Телефон: +7 923 676-33-89\n\n"
-        
+        "Телефон: +7 923 676-33-89\n"
+        "Telegram: https://t.me/jomasiberia\n"
     )
     send_message_unified(
         chat_id=message.chat.id,
@@ -315,8 +313,8 @@ def send_product_info(chat_id, product_code, reply_to_message_id):
     photo_paths = []
     description = ""
     
-   keyboard_contact = types.InlineKeyboardMarkup()
-   keyboard_contact.add(types.InlineKeyboardButton("📨 Написать", url="https://t.me/shyctruk"))
+    keyboard_contact = types.InlineKeyboardMarkup()
+    keyboard_contact.add(types.InlineKeyboardButton("📨 Написать", url="https://t.me/shyctruk"))
 
     # Ваша логика для загрузки фото и описания в зависимости от product_code
     if product_code == 'DRIS2301IN':
